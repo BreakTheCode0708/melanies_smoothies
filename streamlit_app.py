@@ -114,8 +114,12 @@ from snowflake.snowpark.functions import col
 
 # Write directly to the app
 st.title(":cup_with_straw: Customize Your Smoothie :cup_with_straw:")
-st.write("Choose the fruits you want in your custom Smoothie!")
+st.write(
+    """Choose the fruits you want in your custom Smoothie!
+    """
+)
 
+# Input for the name on the smoothie order
 name_on_order = st.text_input('Name on smoothie:')
 st.write('The name on your Smoothie will be:', name_on_order)
 
@@ -123,46 +127,61 @@ st.write('The name on your Smoothie will be:', name_on_order)
 cnx = st.connection("snowflake")
 session = cnx.session()
 
-# Fetch the list of fruits from Snowflake
-fruit_options_df = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'), col('SEARCH_ON'))
-pd_df = fruit_options_df.to_pandas()
+# Fetch the list of fruits and their SEARCH_ON values from Snowflake
+fruit_options_df = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'), col('SEARCH_ON')).to_pandas()
 
-# Convert the Snowpark DataFrame to a list of fruit names
-fruit_options_list = pd_df['FRUIT_NAME'].tolist()  # Ensure this is a regular list
+# Convert the DataFrame to a list of fruit names
+fruit_options_list = fruit_options_df['FRUIT_NAME'].tolist()
 
-# Debug output to verify options
-st.write("Available fruits:", fruit_options_list)
-
-# Multiselect widget to choose fruits
+# Multiselect widget to choose fruits (limit to 5 ingredients)
 ingredients_list = st.multiselect('Choose up to 5 ingredients:', fruit_options_list, max_selections=5)
 
 # Only proceed if ingredients are selected
 if ingredients_list:
+
+    # Create a comma-separated string of chosen ingredients
     ingredients_string = ', '.join(ingredients_list)
+
+    # Display the button for submitting the order
     time_to_insert = st.button('Submit Order')
 
-    if time_to_insert and name_on_order:
-        # SQL Insert statement
-        my_insert_stmt = """
+    if time_to_insert:
+        # Proper SQL Insert statement using f-string
+        my_insert_stmt = f"""
             INSERT INTO smoothies.public.orders (ingredients, name_on_order)
-            VALUES (%s, %s)
+            VALUES ('{ingredients_string}', '{name_on_order}')
         """
-        session.sql(my_insert_stmt, (ingredients_string, name_on_order)).collect()
-        
-        st.success(f'Your Smoothie is ordered, {name_on_order}!', icon="✅")
-    elif not name_on_order:
-        st.warning("Please enter a name for your smoothie.")
 
+        # Display the insert statement for debugging
+        st.write(my_insert_stmt)
+
+        try:
+            # Execute the SQL insert statement
+            session.sql(my_insert_stmt).collect()
+
+            # Display success message
+            st.success(f'Your Smoothie is ordered, {name_on_order}!', icon="✅")
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+
+    # Loop through the selected fruits to fetch and display nutritional information
     for fruit_chosen in ingredients_list:
-        search_on = pd_df.loc[pd_df['FRUIT_NAME'] == fruit_chosen, 'SEARCH_ON'].iloc[0]
-        st.write('The search value for', fruit_chosen, 'is', search_on, '.')
-        st.subheader(fruit_chosen + ' Nutrition Information')
+        # Fetch the corresponding 'SEARCH_ON' value from the DataFrame
+        search_on = fruit_options_df.loc[fruit_options_df['FRUIT_NAME'] == fruit_chosen, 'SEARCH_ON'].iloc[0]
+        
+        st.write(f'The search value for {fruit_chosen} is {search_on}.')
 
-        fruityvice_response = requests.get("https://fruityvice.com/api/fruit/" + fruit_chosen)
+        # Display the nutrition information using the search_on value
+        st.subheader(f'{fruit_chosen} Nutrition Information')
+
+        # Make API request to Fruityvice using the search_on value
+        fruityvice_response = requests.get(f"https://fruityvice.com/api/fruit/{search_on}")
+        
+        # Check if the API call was successful
         if fruityvice_response.status_code == 200:
-            fv_data = fruityvice_response.json()
-            st.dataframe(data=fv_data, use_container_width=True)
+            # Convert the response JSON to a DataFrame and display it
+            fv_df = st.dataframe(data=fruityvice_response.json(), use_container_width=True)
         else:
-            st.error(f"Could not retrieve data for {fruit_chosen}.")
+            st.error(f'Failed to retrieve data for {fruit_chosen}. Please try again.')
 
 
