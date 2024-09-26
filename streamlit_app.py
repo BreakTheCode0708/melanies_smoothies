@@ -45,6 +45,7 @@
 #     st.success("There are no pending orders right now",icon = '👍')
 
 import streamlit as st
+import requests
 from snowflake.snowpark.functions import col
 
 # Write directly to the app
@@ -94,7 +95,11 @@ if ingredients_list:
         # Display success message
         st.success('Your Smoothie is ordered!, '+ name_on_order, icon="✅")
 
-import requests
-fruityvice_response = requests.get("https://fruityvice.com/api/fruit/watermelon")
-#st.text(fruityvice_response.json())
-fv_df = st.dataframe(data=fruityvice_response.json() , use_container_width=True)
+if ingredients_list:
+     for fruit_chosen in ingredients_list:
+         ingredients_string += fruit_chosen + ' '
+         st.subheader(fruit_chosen + ' Nutrition Infromation')
+         fruityvice_response = requests.get("https://fruityvice.com/api/fruit/" + fruit_chosen)
+         fv_df = st.dataframe(data= fruityvice_response.json() , use_container_width=True)
+
+
