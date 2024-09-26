@@ -43,3 +43,7 @@ if my_dataframe:
  
 else:
     st.success("There are no pending orders right now",icon = '👍')
+
+import requests
+fruityvice_response = requests.get("https://fruityvice.com/api/fruit/watermelon")
+st.text(fruityvice_response)
